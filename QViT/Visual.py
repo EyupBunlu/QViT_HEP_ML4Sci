@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as  plt
 def plot_opm(op,args,wire_order=None):
     m_ = matrix(op,wire_order=wire_order)(*args).real
-    if type(m_)=='torch.Tensor':
+    if torch.is_tensor(m_):
         m_=m_.detach().numpy()
     q_n = int( np.log2(m_.shape[0]))
     fig = plt.figure(figsize=[m_.shape[0]/5,m_.shape[0]/5])
@@ -19,6 +19,5 @@ def plot_opm(op,args,wire_order=None):
     plt.yticks(ticks,labels_y)
     plt.colorbar()
     
-
 def tick_label_gen(n):
     return [str(i)[1:-1] for i in itertools.product(*[[0,1] for i in range(n)])]
