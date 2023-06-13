@@ -91,13 +91,13 @@ def matrix_loader(mag_alphas,alphas,mag_wires,wires,is_conjugate=False):
         vector_loader(mag_alphas,mag_wires,is_conjugate=True)
 
 
-def mmult(phi,alpha_x,wires=None):
+def mmult(phi,alphas,wires=None):
     
     if type(wires)==type(None): wires = [ i for i in range(len(alphas)+1)]
     k=0
-    length = len(alpha_x)+1
+    length = len(alphas)+1
     
-    if type(alpha_x)!='NoneType': vector_loader(alpha_x)
+    if type(alphas)!='NoneType': vector_loader(alphas)
     for i in range(2*length-2):
         j = length-abs(length-1-i)
         
