@@ -93,23 +93,23 @@ def matrix_loader(mag_alphas,alphas,mag_wires,wires,is_conjugate=False):
 
 def mmult(phi,alphas,wires=None):
     
-    if type(wires)==type(None): wires = [ i for i in range(len(alphas)+1)]
-    k=0
-    length = len(alphas)+1
+    length = len(alphas)+1 if type(wires)==type(None) else len(wires)
     
-    if type(alphas)!='NoneType': vector_loader(alphas)
+    if type(wires)==type(None): wires = [ i for i in range(length)]
+    k=0
+
     for i in range(2*length-2):
         j = length-abs(length-1-i)
         
         if i%2: 
             for _ in range(j):
                 if _%2==0:
-                    rbs([_,_+1],phi[k])
+                    rbs([wires[_],wires[_+1]],phi[k])
                     k+=1
         else:
             for _ in range(j): 
                 if _%2:
-                    rbs([_,_+1],phi[k])
+                    rbs([wires[_],wires[_+1]],phi[k])
                     k+=1
 
 # # # # # # # # # # Parametrization functions.
