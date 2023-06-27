@@ -113,26 +113,4 @@ def mmult(phi,wires=None,length=None):
 
 # # # # # # # # # # Parametrization functions.
 
-# Converts the array to the parameters
-def convert_array(X):
-    alphas = torch.zeros(X.shape[0]-1)
-    temp = X/(X**2).sum().sqrt()
-    for i,x in enumerate(temp[:-1]):
-        if i==0:
-            alphas[i] = torch.acos(x)
-         
-        else:
 
-            alphas[i] = torch.acos(x/(1-(temp[:i]**2).sum()).sqrt() )
-            if torch.isnan(alphas[i]): alphas[i] = torch.acos(torch.ones(1))
-    return alphas
-
-
-# Converts the matrix to the parameters
-def convert_matrix(X):
-
-    mag_alphas = convert_array( (X**2).sum(axis=1).sqrt() )
-    
-    alphas = torch.stack([convert_array(x) for x in X])
-
-    return mag_alphas,alphas
