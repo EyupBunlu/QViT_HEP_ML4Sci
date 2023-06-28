@@ -1,3 +1,4 @@
+import torch
 # Converts the array to the parameters, supports batch transforms
 def convert_array(X):
     alphas = torch.zeros(*X.shape[:-1],X.shape[-1]-1)
@@ -9,7 +10,7 @@ def convert_array(X):
         else:
 
             alphas[...,i] = torch.acos(X[...,i]/(1-(X[...,:i]**2).sum(axis=-1)[...,None]).sqrt() )
-            alphas[...,i] = torch.where(torch.isnan(alphas[i]),torch.acos(torch.ones(1)),alphas[...,i] )
+            alphas[...,i] = torch.where(torch.isnan(alphas[...,i]),torch.acos(torch.ones(1)),alphas[...,i] )
     return alphas
 
 
