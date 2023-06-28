@@ -9,7 +9,7 @@ def convert_array(X):
          
         else:
 
-            alphas[...,i] = torch.acos(X[...,i]/(1-(X[...,:i]**2).sum(axis=-1)[...,None]).sqrt() )
+            alphas[...,i] = torch.acos(X[...,i]/(1-(X[...,:i]**2).sum(axis=-1)).sqrt() )
         
         alphas[...,i] = torch.where(torch.isnan(alphas[...,i]),torch.acos(torch.ones(1)),alphas[...,i] )
     return alphas
