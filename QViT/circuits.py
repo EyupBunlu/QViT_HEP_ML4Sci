@@ -111,6 +111,26 @@ def mmult(phi,wires=None,length=None):
                     rbs([wires[_],wires[_+1]],phi[k])
                     k+=1
 
-# # # # # # # # # # Parametrization functions.
+
+def compute_attention(alphas,phi,norms,wires):
+    yhat=[]
+    n=norms.shape[1]
+    n_items = alphas.shape[0]
+    for n_i in range(n_items):
+        res = []
+        for i in range(n):
+            for j in range(n):
+                res.append(compute_attention_element(alphas[n_i,i],alphas[n_i,j],wires,phi))
+        
+        yhat.append( (torch.stack(res).reshape(n,n)/2+1/2+1e-6).sqrt()*torch.outer(norms[n_i],norms[n_i]) )
+    yhat = torch.stack(yhat,dim=0)
+    return yhat
+
+# Implements a circuit to calculate expval of x_jAx_i
+def compute_attention_element(alphas_i,alphas_j,wires,phi):
+    vector_loader(alphas_j,wires)
+    mmult(phi,wires=wires)
+    vector_loader(alphas_i,wires,is_conjugate=True)
+    return qml.expval(qml.PauliZ([wires[0]]))
 
 
