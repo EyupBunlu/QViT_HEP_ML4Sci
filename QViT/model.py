@@ -28,7 +28,7 @@ class AttentionHead_Hybrid(nn.Module):
         self.norm = nn.LayerNorm(d_k)
         len_phi = (d_k**2-d_k)//2
         
-        self.A = circuit_to_layer(compute_attention_element,list(range(d_k)),{'phi':len_phi})
+        self.A = circuit_to_layer(compute_attention_element,list(range(d_k)),{'phi':len_phi},device=device)
         self.attention = lambda V,A : torch.bmm(nn.Softmax(dim=-1)(A.type(torch.float32)/math.sqrt(d_k)),V)
 
     def forward(self,input1):

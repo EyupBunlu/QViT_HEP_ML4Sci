@@ -122,7 +122,15 @@ def compute_attention_element(inputs,phi):
     mmult(phi,wires=wires)
     vector_loader(alphas_i,wires,is_conjugate=True)
     return qml.expval(qml.PauliZ([wires[0]]))
-    
+
+# Wrapper
+def circuit_to_layer(func,wires,pars,device='cpu'):
+    dev = qml.device('default.qubit.torch', wires=wires,torch_device=device)#,shots=100)
+    @qml.qnode(dev,interface='torch')#,diff_method='backprop')
+    def f(inputs,phi):
+        return func(inputs,phi)
+    return qml.qnn.TorchLayer(f,pars)
+
 def compute_attention(alphas,norms,compute_element):
     yhat=[]
     n=norms.shape[1]
@@ -131,21 +139,9 @@ def compute_attention(alphas,norms,compute_element):
     n_items = alphas.shape[0]
     
     for n_i in range(n_items):
-        res = []
-        for i in range(n):
+                
+        res= compute_element( torch.stack([alphas[n_i,[i,j]].flatten()  for i in range(n) for j in range(n)],dim=0)  )
 
-            for j in range(n):
-                # res.append(compute_attention_element(alphas[n_i,[i,j]],phi))
-                res.append(compute_element(alphas[n_i,[i,j]].flatten()))
-
-        yhat.append( (torch.stack(res).reshape(n,n)/2+1/2+1e-6).sqrt()*torch.outer(norms[n_i],norms[n_i]))
+        yhat.append( (res.reshape(n,n)/2+1/2+1e-6).sqrt()*torch.outer(norms[n_i],norms[n_i]))
     yhat = torch.stack(yhat,dim=0)
     return yhat
-
-# Wrapper
-def circuit_to_layer(func,wires,pars):
-    dev = qml.device('default.qubit', wires=wires)#,shots=100)
-    @qml.qnode(dev,interface='torch')#,diff_method='backprop')
-    def f(inputs,phi):
-        return func(inputs,phi)
-    return qml.qnn.TorchLayer(f,pars)
