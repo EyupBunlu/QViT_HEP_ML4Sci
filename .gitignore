@@ -1,5 +1,6 @@
 *.pyc
 .ipynb_checkpoints
 QViT/.ipynb_checkpoints
+QViT/".ipynb_checkpoints 2"
 QViT/__pycache__
-
+data/
