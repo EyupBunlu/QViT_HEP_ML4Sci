@@ -55,14 +55,14 @@ def vector_loader(alphas,wires=None,is_x=True,is_conjugate=False):
 # is_x:  Whether to apply hadamard gate to the first gate or not. The default is True
 # is_conjugate : is True if conjugate is being applied. The default is False
 
-    if type(wires)==type(None): wires = [ i for i in range(len(alphas)+1)]
+    if type(wires)==type(None): wires = [ i for i in range(alphas.shape[-1]+1)]
     if is_x and not(is_conjugate):qml.PauliX(wires=wires[0])
     if is_conjugate:
-        for i in reversed(range(len(alphas))):
-            rbs([wires[i],wires[i+1]],-alphas[i])
+        for i in reversed(range(alphas.shape[-1])):
+            rbs([wires[i],wires[i+1]],-alphas[...,i])
     else: 
-        for i,x in enumerate(alphas):
-            rbs([wires[i],wires[i+1]],x)
+        for i in range(alphas.shape[-1]):
+            rbs([wires[i],wires[i+1]],alphas[...,i])
     if is_x and is_conjugate:qml.PauliX(wires=wires[0])
 
 
