@@ -123,7 +123,6 @@ def compute_attention_element(inputs,phi):
     vector_loader(alphas_i,wires,is_conjugate=True)
     return qml.expval(qml.PauliZ([wires[0]]))
     
-
 def compute_attention(alphas,norms,compute_element):
     yhat=[]
     n=norms.shape[1]
