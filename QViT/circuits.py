@@ -2,8 +2,18 @@ import pennylane as qml
 import torch
 import numpy as np
 
+####################################### Shared Func
+
+# Wrapper
+def circuit_to_layer(func,wires,pars,device='cpu'):
+    dev = qml.device('default.qubit.torch', wires=wires,torch_device=device)#,shots=100)
+    @qml.qnode(dev,interface='torch',diff_method='parameter-shift')
+    def f(inputs,phi):
+        return func(inputs,phi)
+    return qml.qnn.TorchLayer(f,pars)
 
 
+########################################### Circuits in the first method
 # # # # # # Circuit Architectures given in the QViT Paper. Unutilized in the project but given for the completeness
 
 def loader_bs(X):
@@ -140,13 +150,6 @@ def compute_attention_element(inputs,phi):
     vector_loader(alphas_i,wires,is_conjugate=True)
     return qml.expval(qml.PauliZ([wires[0]]))
 
-# Wrapper
-def circuit_to_layer(func,wires,pars,device='cpu'):
-    dev = qml.device('default.qubit.torch', wires=wires,torch_device=device)#,shots=100)
-    @qml.qnode(dev,interface='torch')#,diff_method='backprop')
-    def f(inputs,phi):
-        return func(inputs,phi)
-    return qml.qnn.TorchLayer(f,pars)
 
 def compute_attention(alphas,norms,compute_element):
     yhat=[]
@@ -164,3 +167,36 @@ def compute_attention(alphas,norms,compute_element):
     return yhat
 
 
+
+################################################################################# Circuits used in the second method
+
+def encode_token(data):
+    wires = list(range(data.shape[-1]))
+    for i,wire in enumerate(wires):
+        qml.Hadamard(wire)
+        qml.RX(data[...,i],wire)
+        
+        
+def qkv_ansatz(data,phi):
+    wires = list(range(data.shape[-1]))
+    for i,wire in enumerate(wires):
+        qml.RX(phi[i],wire)
+    for i,wire in enumerate(wires):
+        qml.RY(phi[i+len(wires)],wire)
+    for i in range(len(wires)-1):
+        qml.CNOT([wires[i],wires[i+1]])
+    qml.CNOT([wires[-1],wires[0]])
+    for i,wire in enumerate(wires):
+        qml.RY(phi[i+2*len(wires)],wire)
+        
+        
+def measure_query_key(data,phi):
+    encode_token(data)
+    qkv_ansatz(data,phi)
+    wires = list(range(data.shape[-1]))
+    return qml.expval(qml.PauliZ([wires[0]]))
+
+def measure_value(data,phi,wire):
+    encode_token(data)
+    qkv_ansatz(data,phi)
+    return qml.expval(qml.PauliX([wire]))
