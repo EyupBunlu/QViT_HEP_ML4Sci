@@ -112,6 +112,23 @@ def mmult(phi,wires=None,length=None):
                     k+=1
 
 
+def mmult_x(phi,wires=None,length=None):
+    
+    if type(length)==type(None): length = len(wires)
+    if type(wires)==type(None): wires = [ i for i in range(length)]
+    k=0
+
+    for i in range(len(wires)-1):
+        j = len(wires)-2-i
+        
+        if i==j:
+            rbs([wires[j],wires[j+1]],phi[k])
+            k+=1
+        else:
+            rbs([wires[i],wires[i+1]],phi[k])
+            k+=1
+            rbs([wires[j],wires[j+1]],phi[k])
+            k+=1
                     
                     
 # Implements a circuit to calculate expval of x_jAx_i
@@ -119,7 +136,7 @@ def compute_attention_element(inputs,phi):
     alphas_i,alphas_j = torch.split(inputs,inputs.shape[-1]//2,dim=-1)
     wires = list(range(alphas_i.shape[-1]+1))
     vector_loader(alphas_j,wires)
-    mmult(phi,wires=wires)
+    mmult_x(phi,wires=wires)
     vector_loader(alphas_i,wires,is_conjugate=True)
     return qml.expval(qml.PauliZ([wires[0]]))
 
@@ -145,3 +162,5 @@ def compute_attention(alphas,norms,compute_element):
         yhat.append( (res.reshape(n,n)/2+1/2+1e-6).sqrt()*torch.outer(norms[n_i],norms[n_i]))
     yhat = torch.stack(yhat,dim=0)
     return yhat
+
+
