@@ -7,7 +7,7 @@ import numpy as np
 # Wrapper
 def circuit_to_layer(func,wires,pars,device='cpu'):
     dev = qml.device('default.qubit.torch', wires=wires,torch_device=device)#,shots=100)
-    @qml.qnode(dev,interface='torch',diff_method='parameter-shift')
+    @qml.qnode(dev,interface='torch',diff_method='backprop')
     def f(inputs,phi):
         return func(inputs,phi)
     return qml.qnn.TorchLayer(f,pars)
@@ -141,30 +141,34 @@ def mmult_x(phi,wires=None,length=None):
             k+=1
                     
                     
-# Implements a circuit to calculate expval of x_jAx_i
 def compute_attention_element(inputs,phi):
     alphas_i,alphas_j = torch.split(inputs,inputs.shape[-1]//2,dim=-1)
-    wires = list(range(alphas_i.shape[-1]+1))
-    vector_loader(alphas_j,wires)
-    mmult_x(phi,wires=wires)
-    vector_loader(alphas_i,wires,is_conjugate=True)
-    return qml.expval(qml.PauliZ([wires[0]]))
+    wires = list(range(alphas_i.shape[-1]+2))
+    qml.PauliX(wires[0])
+    rbs(wires[:2],torch.pi/4)
+    vector_loader(alphas_j,wires[1:],is_x=False)
+    mmult(phi,wires=wires[1:])
+    vector_loader(alphas_i,wires[1:],is_conjugate=True,is_x=False)
+    rbs(wires[:2],torch.pi/4)
+    return qml.expval(qml.PauliZ([wires[1]]))
+
 
 
 def compute_attention(alphas,norms,compute_element):
     yhat=[]
     n=norms.shape[1]
 
-    wires = list(range(alphas.shape[-1]+1))
     n_items = alphas.shape[0]
     
     for n_i in range(n_items):
                 
-        res= compute_element( torch.stack([alphas[n_i,[i,j]].flatten()  for i in range(n) for j in range(n)],dim=0)  )
-
-        yhat.append( (res.reshape(n,n)/2+1/2+1e-6).sqrt()*torch.outer(norms[n_i],norms[n_i]))
+        res= compute_element( torch.stack([alphas[n_i,[i,j]].flatten()   for j in range(n) for i in range(n)],dim=0)  )
+        e1 = (-res.reshape(n,n)/2+1/2+1e-10).sqrt()
+        wij = e1*2-1
+        yhat.append(wij*torch.outer(norms[n_i],norms[n_i]) )
     yhat = torch.stack(yhat,dim=0)
     return yhat
+
 
 
 
