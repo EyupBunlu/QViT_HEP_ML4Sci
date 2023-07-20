@@ -24,7 +24,7 @@ class AttentionHead_Hybrid1(nn.Module):
         super(AttentionHead_Hybrid1,self).__init__()
 
         self.V = nn.Linear(d_k,d_k)
-        self.norm = nn.LayerNorm(d_k)
+        self.norm = nn.LayerNorm(d_k,elementwise_affine=False)
         # len_phi = (d_k**2-d_k)//2
         len_phi = 2*d_k-3
         self.A = circuit_to_layer(compute_attention_element,list(range(d_k)),{'phi':len_phi})
@@ -41,6 +41,15 @@ class AttentionHead_Hybrid1(nn.Module):
 
         return self.norm(self.attention(V,A)+input1)
 
+
+class EncoderLayer_hybrid2(nn.Module):
+    def __init__(self,d_t,d_k,n_h,attention_type):
+        super(EncoderLayer_hybrid2,self).__init__()
+        self.d_h = d_k//n_h
+        self.heads =  nn.ModuleList([AttentionHead_Hybrid2(d_t,self.d_h) for i in range(n_h)])
+    def forward(self,input1):
+
+        return torch.cat(  [m(input1[...,(i*self.d_h):( (i+1)*self.d_h)]) for i,m in enumerate(self.heads)],dim=-1)
 class AttentionHead_Hybrid2(nn.Module):
     def __init__(self,d_t,d_k):
         super(AttentionHead_Hybrid2,self).__init__()
@@ -48,30 +57,21 @@ class AttentionHead_Hybrid2(nn.Module):
         self.V = nn.Linear(d_k,d_k)
         self.norm = nn.LayerNorm(d_k)
         wires = list(range(d_k))
-        self.Q = circuit_to_layer(measure_query_key,wires=wires,pars={'phi': d_k*4})
-        self.K = circuit_to_layer(measure_query_key,wires=wires,pars={'phi': d_k*4})
-        
+        self.Q = circuit_to_layer(measure_query_key,wires=wires,pars={'phi': d_k*4},device='cuda')
+        self.K = circuit_to_layer(measure_query_key,wires=wires,pars={'phi': d_k*4},device='cuda')
+
         self.attention = lambda A,V : torch.bmm(nn.Softmax(dim=-1)(A/math.sqrt(d_k)),V)
 
     def forward(self,input1):
 
         V = self.V(input1)
-
         Q = self.Q(input1)
         K = self.K(input1)
         A = torch.empty((*input1.shape[:-1],input1.shape[-2]),device=input1.device)
         for j in range(input1.shape[-2]):
-
-            A[...,j] = torch.exp(-(Q-K[...,j][...,None])**2)
-        return self.norm(self.attention(A,V)+input1)    
-def construct_FNN(layers,activation=nn.ReLU,output_activation=None,Dropout = None):
-    layer = [j for i in layers for j in [nn.LazyLinear(i),activation()] ][:-1]
-    if Dropout:
-        layer.insert(len(layer)-2,nn.Dropout(Dropout))
-    if output_activation is not None:
-        layer.append(output_activation)
-    return nn.Sequential(*layer)
-
+            A[...,j] = -(Q-K[...,j][...,None])**2
+        return self.attention(A,V)+input1
+    
 class AttentionHead(nn.Module):
     def __init__(self,d_t,d_k):
         super(AttentionHead,self).__init__()
@@ -104,8 +104,8 @@ class MultiHead(nn.Module):
 class EncoderLayer(nn.Module):
     def __init__(self,d_t,d_k,n_h,attention_type):
         super(EncoderLayer,self).__init__()
-        self.norm1 = nn.LayerNorm([d_k])
-        self.norm2 = nn.LayerNorm([d_k])
+        self.norm1 = nn.LayerNorm([d_k],elementwise_affine=False)
+        self.norm2 = nn.LayerNorm([d_k],elementwise_affine=False)
         self.MHA = MultiHead(d_t,d_k,n_h,attention_type)
         self.merger = construct_FNN([d_k,d_k],activation=nn.GELU)
     def forward(self,input1):
@@ -121,7 +121,8 @@ class Transformer(nn.Module):
 
         self.pos_embedding = nn.parameter.Parameter(torch.tensor( [ math.sin(1/10000**((i-1)/d_k))  if i%2==1 else math.cos(i/10000**((i-1)/d_k)) for i in range(d_k) ]))
         self.pos_embedding.requires_grad = False
-        self.encoder_layers = nn.ModuleList([ EncoderLayer(d_t+1,d_k,n_h,attention_type) for i in range(n_layers)])
+        attention_dict={'hybrid2':EncoderLayer_hybrid2,'classic':EncoderLayer}
+        self.encoder_layers = nn.ModuleList([ attention_dict[attention_type](d_t+1,d_k,n_h,attention_type) for i in range(n_layers)])
         self.class_token = nn.parameter.Parameter(torch.normal(torch.zeros(d_k),1/math.sqrt(d_k)))
         self.embedder = nn.Linear(d_k,d_k)
 
