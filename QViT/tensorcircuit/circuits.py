@@ -1,16 +1,31 @@
-import pennylane as qml
 import torch
+from torch import nn
 import numpy as np
-
+import tensorcircuit as tc
 ####################################### Shared Func
 
 # Wrapper
-def circuit_to_layer(func,wires,pars,device='cpu'):
-    dev = qml.device('default.qubit.torch', wires=wires,torch_device=device)#,shots=100)
-    @qml.qnode(dev,interface='torch',diff_method='backprop')
-    def f(inputs,phi):
-        return func(inputs,phi)
-    return qml.qnn.TorchLayer(f,pars)
+
+class QLayer(nn.Module):
+    
+    def circuit_to_func(self,K,func,nqubits):
+        def f(inputs,phi):
+            return func(inputs,phi,nqubits)
+        # `qpred_vmap` is a jax function with vectorization capacity
+        f_vmap = K.vmap(f, vectorized_argnums=0)
+
+        # Wrap the function into pytorch form but with jax speed!
+        f_batch = tc.interfaces.torch_interface(f_vmap, jit=True)
+        return f_batch
+
+    def __init__(self,func,par_sizes,nqubits):
+        super(QLayer,self).__init__()
+        self.K = K = tc.set_backend("jax")
+        self.w = nn.Parameter(torch.normal(0,1/par_sizes[-1]**.5*torch.ones(par_sizes)) )
+        self.f = self.circuit_to_func(self.K,func,nqubits)
+    def forward(self,input1):
+        return self.f(input1,self.w)
+
 
 
 ########################################### Circuits in the first method
@@ -174,33 +189,31 @@ def compute_attention(alphas,norms,compute_element):
 
 ################################################################################# Circuits used in the second method
 
-def encode_token(data):
-    wires = list(range(data.shape[-1]))
-    for i,wire in enumerate(wires):
-        qml.Hadamard(wire)
-        qml.RX(data[...,i],wire)
+
+def encode_token(c,data,nqubits):
+    for i in range(nqubits):
+        c.H(i)
+        c.rx(i,theta = data[i])
         
         
-def qkv_ansatz(data,phi):
-    wires = list(range(data.shape[-1]))
-    for i,wire in enumerate(wires):
-        qml.RX(phi[i],wire)
-    for i,wire in enumerate(wires):
-        qml.RY(phi[i+len(wires)],wire)
-    for i in range(len(wires)-1):
-        qml.CNOT([wires[i],wires[i+1]])
-    qml.CNOT([wires[-1],wires[0]])
-    for i,wire in enumerate(wires):
-        qml.RY(phi[i+2*len(wires)],wire)
+def qkv_ansatz(c,data,phi,nqubits):
+
+    for i in range(nqubits):
+        c.rx(i,theta=phi[0,i])
+    for i in range(nqubits):
+        c.ry(i,theta=phi[1,i])
+    for i in range(nqubits-1):
+        c.cnot(i,i+1)
         
         
-def measure_query_key(data,phi):
-    encode_token(data)
-    qkv_ansatz(data,phi)
-    wires = list(range(data.shape[-1]))
-    return qml.expval(qml.PauliZ([wires[0]]))
+def measure_query_key(data,phi,nqubits):
+    c=tc.Circuit(nqubits)
+    encode_token(c,data,nqubits)
+    qkv_ansatz(c,data,phi,nqubits)
+    return (c.expectation_ps(z=[0]) ).real
 
 def measure_value(data,phi,wire):
+    c=tc.Circuit(nqubits)
     encode_token(data)
     qkv_ansatz(data,phi)
-    return qml.expval(qml.PauliX([wire]))
+    return jnp.array([circuit.expectation_ps(z=[i]).real for i in range(nqubits)])
