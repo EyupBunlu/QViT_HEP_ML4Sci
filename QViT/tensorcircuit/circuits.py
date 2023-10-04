@@ -1,7 +1,9 @@
-import torch
-from torch import nn
+import torch.nn as nn
 import numpy as np
 import tensorcircuit as tc
+import torch
+from jax import pmap
+from jax.numpy import array
 ####################################### Shared Func
 
 # Wrapper
@@ -11,16 +13,19 @@ class QLayer(nn.Module):
     def circuit_to_func(self,K,func,nqubits):
         def f(inputs,phi):
             return func(inputs,phi,nqubits)
-        # `qpred_vmap` is a jax function with vectorization capacity
-        f_vmap = K.vmap(f, vectorized_argnums=0)
 
-        # Wrap the function into pytorch form but with jax speed!
+        f_vmap = K.vmap(f, vectorized_argnums=0)
+        # f_pmap = pmap(f,in_axes=(0, None))
+
+
         f_batch = tc.interfaces.torch_interface(f_vmap, jit=True)
+
+        
         return f_batch
 
     def __init__(self,func,par_sizes,nqubits):
         super(QLayer,self).__init__()
-        self.K = K = tc.set_backend("jax")
+        self.K = tc.set_backend("jax")
         self.w = nn.Parameter(torch.normal(0,1/par_sizes[-1]**.5*torch.ones(par_sizes)) )
         self.f = self.circuit_to_func(self.K,func,nqubits)
     def forward(self,input1):
@@ -196,24 +201,72 @@ def encode_token(c,data,nqubits):
         c.rx(i,theta = data[i])
         
         
-def qkv_ansatz(c,data,phi,nqubits):
+# def qkv_ansatz(c,data,phi,nqubits):
 
-    for i in range(nqubits):
-        c.rx(i,theta=phi[0,i])
-    for i in range(nqubits):
-        c.ry(i,theta=phi[1,i])
-    for i in range(nqubits-1):
-        c.cnot(i,i+1)
+#     for i in range(nqubits):
+#         c.rx(i,theta=phi[0,i])
+#     for i in range(nqubits):
+#         c.ry(i,theta=phi[1,i])
+#     for i in range(nqubits-1):
+#         c.cnot(i,i+1)
         
+        
+        
+# def qkv_ansatz(c,data,phi,nqubits):
+#     for _ in range(0,phi.shape[0]//3,3)
+#     for i in range(nqubits):
+#         c.rx(i,theta=phi[_,i])
+#     for i in range(nqubits):
+#         c.ry(i,theta=phi[_+1,i])
+        
+#     for i in range(nqubits-1):
+#         c.cnot(i,i+1)
+#     c.cnot(0,nqubits-1)
+
+def qk_ansatz(c,data,phi,nqubits):
+    for i in range(nqubits):
+        c.rx(i,theta=phi[i])
+    for i in range(nqubits):
+        c.ry(i,theta=phi[nqubits+i])
+
+    for _ in range(2,phi.shape[0]//nqubits+1):
+
+
+        for i in range(nqubits-1):
+            c.cnot(i,i+1)
+        c.cnot(nqubits-1,0)
+        if _ != (phi.shape[0]//nqubits):
+            for i in range(nqubits):
+                c.ry(i,theta=phi[nqubits*(_)+i])
+        else:
+            
+            c.ry(0,theta=phi[nqubits*(_)])
+                
+def v_ansatz(c,data,phi,nqubits):
+    for i in range(nqubits):
+        c.rx(i,theta=phi[i])
+    for i in range(nqubits):
+        c.ry(i,theta=phi[nqubits+i])
+
+    for _ in range(2,phi.shape[0]//nqubits):
+
+
+        for i in range(nqubits-1):
+            c.cnot(i,i+1)
+        c.cnot(nqubits-1,0)
+
+        for i in range(nqubits):
+            c.ry(i,theta=phi[nqubits*(_)+i])
+
         
 def measure_query_key(data,phi,nqubits):
     c=tc.Circuit(nqubits)
     encode_token(c,data,nqubits)
-    qkv_ansatz(c,data,phi,nqubits)
+    qk_ansatz(c,data,phi,nqubits)
     return (c.expectation_ps(z=[0]) ).real
 
-def measure_value(data,phi,wire):
+def measure_value(data,phi,nqubits):
     c=tc.Circuit(nqubits)
-    encode_token(data)
-    qkv_ansatz(data,phi)
-    return jnp.array([circuit.expectation_ps(z=[i]).real for i in range(nqubits)])
+    encode_token(c,data,nqubits)
+    v_ansatz(c,data,phi,nqubits)
+    return array([c.expectation_ps(z=[i]).real for i in range(nqubits)])
