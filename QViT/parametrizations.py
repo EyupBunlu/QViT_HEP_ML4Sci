@@ -25,3 +25,19 @@ def convert_matrix(X):
     alphas = convert_array(X)
 
     return mag_alphas,alphas
+
+def patcher_with_color(data,sh):
+    r,c = sh
+
+    rmax = (data.shape[-3]//r)
+    cmax = (data.shape[-2]//c)
+
+    patched = torch.empty(*data.shape[:-3],2*rmax*cmax,r*c,device=data.device)
+    n=0
+    for i in range(rmax):
+        for j in range(cmax):
+            for k in range(2):
+                
+                patched[...,n,:] = data[...,(i*r):(i*r+r),(j*c):(j*c+c),k].flatten(start_dim = -2)
+                n+=1
+    return patched

@@ -63,8 +63,13 @@ def train(model,tr_dl,val_dl,loss_fn,optim,n_epochs,device='cuda'):
                 optim.step()
                 loss += loss_.sum().item()
                 total_samples += y.shape[0]
-                pred_tr.append(yhat.detach().argmax(axis=-1))
-                real_tr.append(y.detach())
+                if len(yhat.shape)==1 or yhat.shape[-1]==1:
+                    pred_tr.append((yhat.detach()>.5).cpu())
+                    real_tr.append(y.detach().cpu().unsqueeze(-1))
+                else:
+                    pred_tr.append(yhat.detach().argmax(axis=-1).cpu())
+                    real_tr.append(y.detach().cpu())
+
                 bar_batch.set_postfix_str(f'loss:{loss/total_samples}')
                             
 
@@ -76,17 +81,26 @@ def train(model,tr_dl,val_dl,loss_fn,optim,n_epochs,device='cuda'):
                     y = i['output']
                     val_loss_ = loss_fn(yhat,y.to(device))
                     val_loss += val_loss_.sum().item()
-                    pred_val.append(yhat.detach().argmax(axis=-1))
-                    real_val.append(y.detach())            
-            history['tr_acc'].append((torch.cat(pred_tr).cpu()==torch.cat(real_tr)).sum()/total_samples )
-            history['val_acc'].append((torch.cat(pred_val).cpu()==torch.cat(real_val)).sum()/len(val_dl.dataset) )
+                    if len(yhat.shape)==1 or yhat.shape[-1]==1:
+                        pred_val.append((yhat.detach()>.5).cpu())
+                        real_val.append(y.detach().cpu().unsqueeze(-1))
+                    else:
+                        pred_val.append(yhat.detach().argmax(axis=-1).cpu())
+                        real_val.append(y.detach().cpu())
+
+            history['tr_acc'].append((torch.cat(pred_tr)==torch.cat(real_tr)).sum()/total_samples )
+            history['val_acc'].append((torch.cat(pred_val)==torch.cat(real_val)).sum()/len(val_dl.dataset) )
             history['val'].append(val_loss/len(val_dl.dataset))
             history['tr'].append(loss/total_samples)
             bar_epoch.set_postfix_str(f'loss:{loss/total_samples}, v.loss:{val_loss/len(val_dl.dataset)},\
             tr_acc:{history["tr_acc"][-1] }, val_acc:{ history["val_acc"][-1] }')
             if history['val'][-1]<min_loss:
                 min_loss = history['val'][-1]
-                torch.save(model.state_dict(),'best_state_on_training')
+                torch.save(model.state_dict(),'best_state_on_training_loss')
+            if history['val_acc'][-1]==max(history['val_acc']):
+                min_loss = history['val'][-1]
+                torch.save(model.state_dict(),'best_state_on_training_acc')
+            torch.save(history,'temp_history')
         return history
     except KeyboardInterrupt:
         return history

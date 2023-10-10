@@ -6,28 +6,24 @@ from jax import pmap
 from jax.numpy import array
 ####################################### Shared Func
 
-# Wrapper
+# Wrapper to turn quantum circuits to functions with gradients
 
 class QLayer(nn.Module):
     
-    def circuit_to_func(self,K,func,nqubits):
-        def f(inputs,phi):
-            return func(inputs,phi,nqubits)
+    def circuit_to_func(self,K,quantum_circuit,nqubits):
+        def f(inputs,parameters):
+            return quantum_circuit(inputs,parameters,nqubits)
 
         f_vmap = K.vmap(f, vectorized_argnums=0)
-        # f_pmap = pmap(f,in_axes=(0, None))
-
-
         f_batch = tc.interfaces.torch_interface(f_vmap, jit=True)
 
-        
         return f_batch
 
-    def __init__(self,func,par_sizes,nqubits):
+    def __init__(self,quantum_circuit,par_sizes,nqubits):
         super(QLayer,self).__init__()
-        self.K = tc.set_backend("jax")
+        self.backend = tc.set_backend("jax")
         self.w = nn.Parameter(torch.normal(0,1/par_sizes[-1]**.5*torch.ones(par_sizes)) )
-        self.f = self.circuit_to_func(self.K,func,nqubits)
+        self.f = self.circuit_to_func(self.backend,quantum_circuit,nqubits)
     def forward(self,input1):
         return self.f(input1,self.w)
 
@@ -41,7 +37,7 @@ def loader_bs(X):
     for i,x in enumerate(X):
         # if X[i]!=X.max():
         qml.Beamsplitter(X[i]/X.max(),0,[i,i+1])
-def mmult_bs(phi,X,length=3):
+def mmult_bs(parameters,X,length=3):
 
     k=0
     loader_bs(X)
@@ -51,12 +47,12 @@ def mmult_bs(phi,X,length=3):
         if i%2: 
             for _ in range(j):
                 if _%2==0:
-                    qml.Beamsplitter(phi[k], 0, [_,_+1])
+                    qml.Beamsplitter(parameters[k], 0, [_,_+1])
                     k+=1
         else:
             for _ in range(j): 
                 if _%2:
-                    qml.Beamsplitter(phi[k], 0, [_,_+1])
+                    qml.Beamsplitter(parameters[k], 0, [_,_+1])
                     k+=1
     return qml.expval(qml.PauliZ([1]))
 
@@ -121,7 +117,7 @@ def matrix_loader(mag_alphas,alphas,mag_wires,wires,is_conjugate=False):
         vector_loader(mag_alphas,mag_wires,is_conjugate=True)
 
 
-def mmult(phi,wires=None,length=None):
+def mmult(parameters,wires=None,length=None):
     
     if type(length)==type(None): length = len(wires)
     if type(wires)==type(None): wires = [ i for i in range(length)]
@@ -133,16 +129,16 @@ def mmult(phi,wires=None,length=None):
         if i%2: 
             for _ in range(j):
                 if _%2==0:
-                    rbs([wires[_],wires[_+1]],phi[k])
+                    rbs([wires[_],wires[_+1]],parameters[k])
                     k+=1
         else:
             for _ in range(j): 
                 if _%2:
-                    rbs([wires[_],wires[_+1]],phi[k])
+                    rbs([wires[_],wires[_+1]],parameters[k])
                     k+=1
 
 
-def mmult_x(phi,wires=None,length=None):
+def mmult_x(parameters,wires=None,length=None):
     
     if type(length)==type(None): length = len(wires)
     if type(wires)==type(None): wires = [ i for i in range(length)]
@@ -152,22 +148,22 @@ def mmult_x(phi,wires=None,length=None):
         j = len(wires)-2-i
         
         if i==j:
-            rbs([wires[j],wires[j+1]],phi[k])
+            rbs([wires[j],wires[j+1]],parameters[k])
             k+=1
         else:
-            rbs([wires[i],wires[i+1]],phi[k])
+            rbs([wires[i],wires[i+1]],parameters[k])
             k+=1
-            rbs([wires[j],wires[j+1]],phi[k])
+            rbs([wires[j],wires[j+1]],parameters[k])
             k+=1
                     
                     
-def compute_attention_element(inputs,phi):
+def compute_attention_element(inputs,parameters):
     alphas_i,alphas_j = torch.split(inputs,inputs.shape[-1]//2,dim=-1)
     wires = list(range(alphas_i.shape[-1]+2))
     qml.PauliX(wires[0])
     rbs(wires[:2],torch.pi/4)
     vector_loader(alphas_j,wires[1:],is_x=False)
-    mmult(phi,wires=wires[1:])
+    mmult(parameters,wires=wires[1:])
     vector_loader(alphas_i,wires[1:],is_conjugate=True,is_x=False)
     rbs(wires[:2],torch.pi/4)
     return qml.expval(qml.PauliZ([wires[1]]))
@@ -195,78 +191,78 @@ def compute_attention(alphas,norms,compute_element):
 ################################################################################# Circuits used in the second method
 
 
-def encode_token(c,data,nqubits):
+def encode_token(circuit,data,nqubits):
     for i in range(nqubits):
-        c.H(i)
-        c.rx(i,theta = data[i])
+        circuit.H(i)
+        circuit.rx(i,theta = data[i])
         
         
-# def qkv_ansatz(c,data,phi,nqubits):
+# def qkv_ansatz(c,data,parameters,nqubits):
 
 #     for i in range(nqubits):
-#         c.rx(i,theta=phi[0,i])
+#         c.rx(i,theta=parameters[0,i])
 #     for i in range(nqubits):
-#         c.ry(i,theta=phi[1,i])
+#         c.ry(i,theta=parameters[1,i])
 #     for i in range(nqubits-1):
 #         c.cnot(i,i+1)
         
         
         
-# def qkv_ansatz(c,data,phi,nqubits):
-#     for _ in range(0,phi.shape[0]//3,3)
+# def qkv_ansatz(c,data,parameters,nqubits):
+#     for _ in range(0,parameters.shape[0]//3,3)
 #     for i in range(nqubits):
-#         c.rx(i,theta=phi[_,i])
+#         c.rx(i,theta=parameters[_,i])
 #     for i in range(nqubits):
-#         c.ry(i,theta=phi[_+1,i])
+#         c.ry(i,theta=parameters[_+1,i])
         
 #     for i in range(nqubits-1):
 #         c.cnot(i,i+1)
 #     c.cnot(0,nqubits-1)
 
-def qk_ansatz(c,data,phi,nqubits):
+def qk_ansatz(circuit,data,parameters,nqubits):
     for i in range(nqubits):
-        c.rx(i,theta=phi[i])
+        circuit.rx(i,theta=parameters[i])
     for i in range(nqubits):
-        c.ry(i,theta=phi[nqubits+i])
+        circuit.ry(i,theta=parameters[nqubits+i])
 
-    for _ in range(2,phi.shape[0]//nqubits+1):
+    for _ in range(2,parameters.shape[0]//nqubits+1):
 
 
         for i in range(nqubits-1):
-            c.cnot(i,i+1)
-        c.cnot(nqubits-1,0)
-        if _ != (phi.shape[0]//nqubits):
+            circuit.cnot(i,i+1)
+        circuit.cnot(nqubits-1,0)
+        if _ != (parameters.shape[0]//nqubits):
             for i in range(nqubits):
-                c.ry(i,theta=phi[nqubits*(_)+i])
+                circuit.ry(i,theta=parameters[nqubits*(_)+i])
         else:
             
-            c.ry(0,theta=phi[nqubits*(_)])
+            circuit.ry(0,theta=parameters[nqubits*(_)])
                 
-def v_ansatz(c,data,phi,nqubits):
+def v_ansatz(circuits,data,parameters,nqubits):
     for i in range(nqubits):
-        c.rx(i,theta=phi[i])
+        circuits.rx(i,theta=parameters[i])
     for i in range(nqubits):
-        c.ry(i,theta=phi[nqubits+i])
+        circuits.ry(i,theta=parameters[nqubits+i])
 
-    for _ in range(2,phi.shape[0]//nqubits):
+    for _ in range(2,parameters.shape[0]//nqubits):
 
 
         for i in range(nqubits-1):
-            c.cnot(i,i+1)
-        c.cnot(nqubits-1,0)
+            circuits.cnot(i,i+1)
+        circuits.cnot(nqubits-1,0)
 
         for i in range(nqubits):
-            c.ry(i,theta=phi[nqubits*(_)+i])
+            circuits.ry(i,theta=parameters[nqubits*(_)+i])
 
         
-def measure_query_key(data,phi,nqubits):
-    c=tc.Circuit(nqubits)
-    encode_token(c,data,nqubits)
-    qk_ansatz(c,data,phi,nqubits)
-    return (c.expectation_ps(z=[0]) ).real
+def measure_query_key(data,parameters,nqubits):
+    circuit=tc.Circuit(nqubits)
+    encode_token(circuit,data,nqubits)
+    qk_ansatz(circuit,data,parameters,nqubits)
+    return (circuit.expectation_ps(z=[0]) ).real
 
-def measure_value(data,phi,nqubits):
-    c=tc.Circuit(nqubits)
-    encode_token(c,data,nqubits)
-    v_ansatz(c,data,phi,nqubits)
-    return array([c.expectation_ps(z=[i]).real for i in range(nqubits)])
+def measure_value(data,parameters,nqubits):
+    circuit=tc.Circuit(nqubits)
+    encode_token(circuit,data,nqubits)
+    v_ansatz(circuit,data,parameters,nqubits)
+    return array([circuit.expectation_ps(z=[i]).real for i in range(nqubits)])
