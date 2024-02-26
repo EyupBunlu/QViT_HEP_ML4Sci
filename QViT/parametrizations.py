@@ -32,7 +32,7 @@ def patcher_with_color(data,sh):
     rmax = (data.shape[-3]//r)
     cmax = (data.shape[-2]//c)
 
-    patched = torch.empty(*data.shape[:-3],2*rmax*cmax,r*c,device=data.device)
+    patched = torch.empty(*data.shape[:-3],2*rmax*cmax,r*c,device=data.device).type(torch.float32)
     n=0
     for i in range(rmax):
         for j in range(cmax):

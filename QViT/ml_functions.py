@@ -64,7 +64,7 @@ def train(model,tr_dl,val_dl,loss_fn,optim,n_epochs,device='cuda'):
                 loss += loss_.sum().item()
                 total_samples += y.shape[0]
                 if len(yhat.shape)==1 or yhat.shape[-1]==1:
-                    pred_tr.append((yhat.detach()>.5).cpu())
+                    pred_tr.append((torch.sigmoid(yhat.detach())>.5).cpu())
                     real_tr.append(y.detach().cpu().unsqueeze(-1))
                 else:
                     pred_tr.append(yhat.detach().argmax(axis=-1).cpu())
@@ -82,7 +82,7 @@ def train(model,tr_dl,val_dl,loss_fn,optim,n_epochs,device='cuda'):
                     val_loss_ = loss_fn(yhat,y.to(device))
                     val_loss += val_loss_.sum().item()
                     if len(yhat.shape)==1 or yhat.shape[-1]==1:
-                        pred_val.append((yhat.detach()>.5).cpu())
+                        pred_val.append((torch.sigmoid(yhat.detach())>.5).cpu())
                         real_val.append(y.detach().cpu().unsqueeze(-1))
                     else:
                         pred_val.append(yhat.detach().argmax(axis=-1).cpu())

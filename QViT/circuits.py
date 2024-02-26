@@ -253,7 +253,6 @@ def v_ansatz(circuits,data,parameters,nqubits):
 
         for i in range(nqubits):
             circuits.ry(i,theta=parameters[nqubits*(_)+i])
-
         
 def measure_query_key(data,parameters,nqubits):
     circuit=tc.Circuit(nqubits)
